@@ -276,16 +276,24 @@ public:
 };
 
 int main() {
+
+
     Orderbook orderbook;
+
+    // RNG setup
     std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<int> priceDist(1, 1000);
     std::uniform_int_distribution<int> qtyDist(1, 1000);
     std::uniform_int_distribution<int> sideDist(0, 1);
     std::uniform_int_distribution<int> typeDist(0, 1);
 
-    const int delayMs = 5;
+    const int numOrders = 5'000'000; // large number for meaningful throughput
+    std::size_t totalTrades = 0;
 
-    for (int i = 0; i < 5000; ++i) {
+    // Start timing
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < numOrders; ++i) {
         Side side = static_cast<Side>(sideDist(rng));
         OrderType type = static_cast<OrderType>(typeDist(rng));
         Price price = priceDist(rng);
@@ -293,32 +301,23 @@ int main() {
         OrderId id = GenerateOrderId();
 
         auto order = std::make_shared<Order>(type, id, side, price, qty);
-
-        std::cout << "Order Placed: ID=" << id
-                  << " Type=" << (type == OrderType::GoodTillCancel ? "GTC" : "FAK")
-                  << " Side=" << (side == Side::Buy ? "Buy" : "Sell")
-                  << " Price=" << price
-                  << " Quantity=" << qty << '\n';
-
         auto trades = orderbook.AddOrder(order);
-        for (const auto& trade : trades) {
-            std::cout << "Trade Executed: Buy ID=" << trade.GetBid().id
-                      << " Sell ID=" << trade.GetAsk().id
-                      << " Price=" << trade.GetBid().price
-                      << " Quantity=" << trade.GetBid().qty << '\n';
-        }
-
-        OrderbookPrinter::Print(orderbook.GetOrderInfos());
-        std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+        totalTrades += trades.size();
     }
 
-    std::cout << "\nFinal Orderbook State:\nBids:\n";
-    for (const auto& level : orderbook.GetOrderInfos().GetBids())
-        std::cout << "  Price: " << level.price << ", Quantity: " << level.quantity << '\n';
+    // End timing
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
 
-    std::cout << "Asks:\n";
-    for (const auto& level : orderbook.GetOrderInfos().GetAsks())
-        std::cout << "  Price: " << level.price << ", Quantity: " << level.quantity << '\n';
+    // Throughput calculation
+    double ordersPerSecond = numOrders / elapsed.count();
+    double tradesPerSecond = totalTrades / elapsed.count();
+
+    std::cout << "Processed " << numOrders << " orders in "
+              << elapsed.count() << " seconds\n";
+    std::cout << "Orders/sec: " << ordersPerSecond << "\n";
+    std::cout << "Total trades executed: " << totalTrades << "\n";
+    std::cout << "Trades/sec: " << tradesPerSecond << "\n";
 
     return 0;
 }
